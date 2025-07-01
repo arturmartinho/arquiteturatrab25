@@ -74,8 +74,8 @@ class SAP1GUI:
         self.out_label = tk.Label(calc_frame, fg="#ffff00", bg="#121212", font=("Courier", 14, "bold"))
         self.out_label.grid(row=4, column=0, pady=10, sticky="w")
 
-        # Log
-        self.log_text = tk.Text(calc_frame, height=6, width=65, font=("Courier", 10),
+        # Log (campo maior para facilitar visualização)
+        self.log_text = tk.Text(calc_frame, height=15, width=80, font=("Courier", 10),
                                 bg="#131419", fg="#00ff88", bd=2, relief="groove", insertbackground="white")
         self.log_text.grid(row=5, column=0, columnspan=2, pady=10)
         self.log_text.insert(tk.END, "Log de execução:\n")
@@ -109,12 +109,76 @@ class SAP1GUI:
             messagebox.showinfo("Parado", "O programa já terminou (HLT).")
             return
 
+        # Estado antes do passo
+        pc_before = self.sap.pc
         ir_before = self.sap.ir
-        self.sap.step()
-        self.update_ui()
+        acc_before = self.sap.acc
+        b_before = self.sap.b
+        mar_before = self.sap.mar
+        out_before = self.sap.out
+        carry_before = getattr(self.sap, "carry_flag", None)
+        zero_before = getattr(self.sap, "zero_flag", None)
 
-        if ((ir_before & 0xF0) >> 4) == 0xE:
-            self.log(f"Saída OUT: {self.sap.out} (0x{self.sap.out:02X})")
+        # Passo da CPU (fetch + decode + execute)
+        self.sap.step()
+
+        # Estado depois do passo
+        pc_after = self.sap.pc
+        ir_after = self.sap.ir
+        acc_after = self.sap.acc
+        b_after = self.sap.b
+        mar_after = self.sap.mar
+        out_after = self.sap.out
+        carry_after = getattr(self.sap, "carry_flag", None)
+        zero_after = getattr(self.sap, "zero_flag", None)
+
+        # Decodificar opcode e operando
+        opcode = (ir_after & 0xF0) >> 4
+        operando = ir_after & 0x0F
+
+        opcode_map = {
+            0x0: "NOP", 0x1: "LDA", 0x2: "ADD", 0x3: "SUB",
+            0x4: "STA", 0x5: "LDI", 0x6: "JMP", 0x7: "JC",
+            0x8: "JZ", 0xE: "OUT", 0xF: "HLT"
+        }
+
+        instr_name = opcode_map.get(opcode, "???")
+
+        log_msg = (
+            "----------------------------------------\n"
+            f"PASSO EXECUTADO:\n"
+            f"Instrução: {instr_name} {operando if instr_name not in ['NOP', 'OUT', 'HLT'] else ''}\n\n"
+
+            "ESTADO ANTES DA INSTRUÇÃO:\n"
+            f" PC  = 0x{pc_before:02X}\n"
+            f" IR  = 0x{ir_before:02X}\n"
+            f" MAR = 0x{mar_before:02X}\n"
+            f" ACC = 0x{acc_before:02X}\n"
+            f" B   = 0x{b_before:02X}\n"
+            f" Flags:\n"
+            f"  Carry = {carry_before}\n"
+            f"  Zero  = {zero_before}\n\n"
+
+            "ESTADO DEPOIS DA INSTRUÇÃO:\n"
+            f" PC  = 0x{pc_after:02X}\n"
+            f" IR  = 0x{ir_after:02X}\n"
+            f" MAR = 0x{mar_after:02X}\n"
+            f" ACC = 0x{acc_after:02X}\n"
+            f" B   = 0x{b_after:02X}\n"
+            f" Flags:\n"
+            f"  Carry = {carry_after}\n"
+            f"  Zero  = {zero_after}\n"
+            "----------------------------------------"
+        )
+
+        self.log(log_msg)
+
+        # Mostrar saída OUT somente se a instrução executada foi OUT
+        if opcode == 0xE:
+            self.log(f"SAÍDA (OUT): {out_after} (decimal)  |  0x{out_after:02X} (hexadecimal)")
+
+        # Atualizar a interface gráfica
+        self.update_ui()
 
     def run_program(self):
         if self.sap.halted:
@@ -150,6 +214,7 @@ class SAP1GUI:
         self.log_text.insert(tk.END, text + "\n")
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
+
 
 if __name__ == "__main__":
     root = tk.Tk()
